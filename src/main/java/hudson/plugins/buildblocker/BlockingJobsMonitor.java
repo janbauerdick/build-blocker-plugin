@@ -24,23 +24,33 @@
 
 package hudson.plugins.buildblocker;
 
+import hudson.EnvVars;
 import hudson.matrix.MatrixConfiguration;
+import hudson.model.Action;
+import hudson.model.ParameterValue;
+import hudson.model.TaskListener;
+import hudson.model.AbstractProject;
 import hudson.model.Computer;
 import hudson.model.Executor;
+import hudson.model.ParametersAction;
 import hudson.model.Queue;
+import hudson.model.Run;
 import hudson.model.queue.SubTask;
+import hudson.util.RunList;
+import hudson.util.StreamTaskListener;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import jenkins.model.Jenkins;
 import org.apache.commons.lang.StringUtils;
 
-import java.util.Arrays;
-import java.util.List;
-
 /**
- * This class represents a monitor that checks all running jobs if
- * one of their names matches with one of the given blocking job's
- * regular expressions.
- *
- * The first hit returns the blocking job's name.
+ * This class represents a monitor that checks all running jobs if one of their names matches with one of the given blocking job's regular
+ * expressions. The first hit returns the blocking job's name.
  */
 public class BlockingJobsMonitor {
 
@@ -51,70 +61,171 @@ public class BlockingJobsMonitor {
 
     /**
      * Constructor using the job configuration entry for blocking jobs
+     *
      * @param blockingJobs line feed separated list og blocking jobs
      */
     public BlockingJobsMonitor(String blockingJobs) {
-        if(StringUtils.isNotBlank(blockingJobs)) {
+        if (StringUtils.isNotBlank(blockingJobs)) {
             this.blockingJobs = Arrays.asList(blockingJobs.split("\n"));
         }
     }
 
     /**
      * Returns the name of the first blocking job. If not found, it returns null.
-     * @param item The queue item for which we are checking whether it can run or not.
-     *        or null if we are not checking a job from the queue (currently only used by testing).
+     *
+     * @param item The queue item for which we are checking whether it can run or not. or null if we are not checking a job from the queue
+     *            (currently only used by testing).
      * @return the name of the first blocking job.
      */
-    public SubTask getBlockingJob(Queue.Item item) {
-        if(this.blockingJobs == null) {
+    public SubTask getBlockingJob(Queue.Item item, String params) {
+        if (this.blockingJobs == null) {
             return null;
         }
 
         Computer[] computers = Jenkins.getInstance().getComputers();
-
+        SubTask subTask;
+        Queue.Task task;
         for (Computer computer : computers) {
             List<Executor> executors = computer.getExecutors();
 
             executors.addAll(computer.getOneOffExecutors());
 
             for (Executor executor : executors) {
-                if(executor.isBusy()) {
+                if (executor.isBusy()) {
                     Queue.Executable currentExecutable = executor.getCurrentExecutable();
 
-                    SubTask subTask = currentExecutable.getParent();
-                    Queue.Task task = subTask.getOwnerTask();
+                    subTask = currentExecutable.getParent();
+                    task = subTask.getOwnerTask();
 
-                    if (task instanceof MatrixConfiguration) {
+                    if ((task instanceof MatrixConfiguration)) {
                         task = ((MatrixConfiguration) task).getParent();
                     }
 
+
                     for (String blockingJob : this.blockingJobs) {
-                        if(task.getFullDisplayName().matches(blockingJob)) {
-                            return subTask;
+                        if (task.getName().matches(blockingJob)) {
+                            AbstractProject project = (AbstractProject) task;
+                            RunList<Run> builds = project.getBuilds();
+                            int i = 0;
+                            Iterator<Run> it = builds.iterator();
+                            while ((i < 10) && (it.hasNext())) {
+                                Run run = it.next();
+                                i++;
+                                if (run.isBuilding()) {
+                                    try {
+                                        TaskListener listener = new StreamTaskListener(run.getLogFile());
+                                        EnvVars vars = run.getEnvironment(listener);
+                                        params = vars.expand(params);
+                                        Map<String, String> parsedParams = parseParams(params);
+                                        List<Action> actions = run.getActions();
+                                        boolean hasParameters = false;
+                                        for (Action act : actions) {
+                                            if ((act instanceof ParametersAction)) {
+                                                hasParameters = true;
+                                                for (ParameterValue value : ((ParametersAction) act).getParameters()) {
+                                                    if (hasBlockingParam(parsedParams, value.toString())) {
+                                                        return subTask;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if (!hasParameters) {
+                                            return subTask;
+                                        }
+                                    } catch (IOException e) {
+                                        return null;
+                                    } catch (InterruptedException e) {
+                                        //
+                                    }
+                                }
+                            }
                         }
                     }
+
+                }
+
+            }
+
+        }
+
+        /**
+         * check the list of items that have already been approved for building (but haven't actually started yet)
+         */
+        List<Queue.BuildableItem> buildableItems = Jenkins.getInstance().getQueue().getBuildableItems();
+        Iterator<Queue.BuildableItem> it0 = buildableItems.iterator();
+
+        while (it0.hasNext()) {
+            Queue.BuildableItem buildableItem = it0.next();
+            if (item != buildableItem)
+                for (String blockingJob : this.blockingJobs)
+                    if (buildableItem.task.getFullDisplayName().matches(blockingJob)) {
+                        AbstractProject project = (AbstractProject) buildableItem.task;
+                        RunList<Run> builds = project.getBuilds();
+                        int i = 0;
+                        Iterator<Run> it = builds.iterator();
+                        while ((i < 10) && (it.hasNext())) {
+                            Run run = it.next();
+                            i++;
+                            if (run.isBuilding()) {
+                                try {
+                                    TaskListener listener = new StreamTaskListener(run.getLogFile());
+                                    EnvVars vars = run.getEnvironment(listener);
+                                    params = vars.expand(params);
+                                    Map<String, String> parsedParams = parseParams(params);
+                                    List<Action> actions = run.getActions();
+                                    boolean hasParameters = false;
+                                    for (Action act : actions) {
+                                        if ((act instanceof ParametersAction)) {
+                                            hasParameters = true;
+                                            for (ParameterValue value : ((ParametersAction) act).getParameters()) {
+                                                if (hasBlockingParam(parsedParams, value.toString())) {
+                                                    return buildableItem.task;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (!hasParameters) {
+                                        return buildableItem.task;
+                                    }
+                                } catch (IOException e) {
+                                    return null;
+                                } catch (InterruptedException e) {
+                                    //
+                                }
+                            }
+                        }
+                    }
+        }
+        return null;
+    }
+
+    private boolean hasBlockingParam(Map<String, String> blocked, String params) {
+        if ((null != params) && (!"".equalsIgnoreCase(params))) {
+            String[] splitted = params.split(" ");
+            if ((null != splitted[1]) && (!"".equals(splitted[1])) && (splitted[1].contains("="))) {
+                String key = splitted[1].split("=")[0];
+                String value = splitted[1].split("=")[1].replace("'", "");
+                if (blocked.containsKey(key)) {
+                    return blocked.get(key).equals(value);
                 }
             }
         }
 
-        /**
-         * check the list of items that have
-         * already been approved for building
-         * (but haven't actually started yet)
-         */
-        List<Queue.BuildableItem> buildableItems
-            = Jenkins.getInstance().getQueue().getBuildableItems();
+        return (blocked == null) || (blocked.isEmpty());
+    }
 
-        for (Queue.BuildableItem buildableItem : buildableItems) {
-        	if(item != buildableItem) {
-	            for (String blockingJob : this.blockingJobs) {
-	                if(buildableItem.task.getFullDisplayName().matches(blockingJob)) {
-	                    return buildableItem.task;
-	                }
-	            }
-        	}
+    private Map<String, String> parseParams(String blockingParams) {
+        if ((null != blockingParams) && (!"".equalsIgnoreCase(blockingParams))) {
+            String[] paramArray = blockingParams.split(",");
+            Map<String, String> params = new HashMap<String, String>(paramArray.length);
+            for (String param : paramArray) {
+                String[] parsed = param.split("=");
+                if (2 == parsed.length) {
+                    params.put(parsed[0], parsed[1]);
+                }
+            }
+            return params;
         }
-
-        return null;
+        return Collections.emptyMap();
     }
 }

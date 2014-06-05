@@ -30,11 +30,10 @@ import hudson.model.labels.LabelAtom;
 import hudson.slaves.DumbSlave;
 import hudson.slaves.SlaveComputer;
 import hudson.tasks.Shell;
-import jenkins.model.Jenkins;
-import org.jvnet.hudson.test.HudsonTestCase;
-
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import jenkins.model.Jenkins;
+import org.jvnet.hudson.test.HudsonTestCase;
 
 /**
  * Unit tests
@@ -67,6 +66,11 @@ public class BlockingJobsMonitorTest extends HudsonTestCase {
         blockingProject.getBuildersList().add(shell);
 
         Future<FreeStyleBuild> future = blockingProject.scheduleBuild2(0);
+        BuildBlockerProperty property = blockingProject.getProperty(BuildBlockerProperty.class);
+        String params = null;
+        if (null != property) {
+            params = property.getBlockingJobsParams();
+        }
 
         // wait until blocking job started
         while(! slave.getComputer().getExecutors().get(0).isBusy()) {
@@ -74,25 +78,25 @@ public class BlockingJobsMonitorTest extends HudsonTestCase {
         }
 
         BlockingJobsMonitor blockingJobsMonitorUsingNull = new BlockingJobsMonitor(null);
-        assertNull(blockingJobsMonitorUsingNull.getBlockingJob(null));
+        assertNull(blockingJobsMonitorUsingNull.getBlockingJob(null, params));
 
         BlockingJobsMonitor blockingJobsMonitorNotMatching = new BlockingJobsMonitor("xxx");
-        assertNull(blockingJobsMonitorNotMatching.getBlockingJob(null));
+        assertNull(blockingJobsMonitorNotMatching.getBlockingJob(null, params));
 
         BlockingJobsMonitor blockingJobsMonitorUsingFullName = new BlockingJobsMonitor(blockingJobName);
-        assertEquals(blockingJobName, blockingJobsMonitorUsingFullName.getBlockingJob(null).getDisplayName());
+        assertEquals(blockingJobName, blockingJobsMonitorUsingFullName.getBlockingJob(null, params).getDisplayName());
 
         BlockingJobsMonitor blockingJobsMonitorUsingRegex = new BlockingJobsMonitor("block.*");
-        assertEquals(blockingJobName, blockingJobsMonitorUsingRegex.getBlockingJob(null).getDisplayName());
+        assertEquals(blockingJobName, blockingJobsMonitorUsingRegex.getBlockingJob(null, params).getDisplayName());
 
         BlockingJobsMonitor blockingJobsMonitorUsingMoreLines = new BlockingJobsMonitor("xxx\nblock.*\nyyy");
-        assertEquals(blockingJobName, blockingJobsMonitorUsingMoreLines.getBlockingJob(null).getDisplayName());
+        assertEquals(blockingJobName, blockingJobsMonitorUsingMoreLines.getBlockingJob(null, params).getDisplayName());
 
         // wait until blocking job stopped
         while (! future.isDone()) {
             TimeUnit.SECONDS.sleep(1);
         }
 
-        assertNull(blockingJobsMonitorUsingFullName.getBlockingJob(null));
+        assertNull(blockingJobsMonitorUsingFullName.getBlockingJob(null, params));
     }
 }

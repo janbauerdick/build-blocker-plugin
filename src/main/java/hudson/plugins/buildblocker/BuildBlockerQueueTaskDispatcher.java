@@ -28,9 +28,9 @@ import hudson.Extension;
 import hudson.matrix.MatrixConfiguration;
 import hudson.model.AbstractProject;
 import hudson.model.Queue;
-import hudson.model.queue.CauseOfBlockage;
 import hudson.model.queue.QueueTaskDispatcher;
 import hudson.model.queue.SubTask;
+import hudson.model.queue.CauseOfBlockage;
 
 /**
  * Queue task dispatcher that evaluates the given blocking jobs in the config of the
@@ -75,16 +75,19 @@ public class BuildBlockerQueueTaskDispatcher extends QueueTaskDispatcher {
             BuildBlockerProperty property = (BuildBlockerProperty) project.getProperty(BuildBlockerProperty.class);
 
             if(property != null) {
-                String blockingJobs = property.getBlockingJobs();
 
-                SubTask subTask = new BlockingJobsMonitor(blockingJobs).getBlockingJob(item);
+                String blockingJobs = property.getBlockingJobs();
+                String params = property.getBlockingJobsParams();
+
+                SubTask subTask = new BlockingJobsMonitor(blockingJobs).getBlockingJob(item, params);
 
                 if(subTask != null) {
+
                     if(subTask instanceof MatrixConfiguration) {
                         subTask = ((MatrixConfiguration) subTask).getParent();
                     }
 
-                    return CauseOfBlockage.fromMessage(Messages._BlockingJobIsRunning(item.getInQueueForString(), subTask.getDisplayName()));
+                    return CauseOfBlockage.fromMessage(Messages._BlockingJobIsRunning(item.getInQueueForString(), subTask.getDisplayName() + " " + params));
                 }
             }
         }
