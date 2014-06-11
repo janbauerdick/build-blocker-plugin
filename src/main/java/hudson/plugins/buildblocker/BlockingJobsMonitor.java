@@ -26,13 +26,10 @@ package hudson.plugins.buildblocker;
 
 import hudson.EnvVars;
 import hudson.matrix.MatrixConfiguration;
-import hudson.model.Action;
-import hudson.model.ParameterValue;
 import hudson.model.TaskListener;
 import hudson.model.AbstractProject;
 import hudson.model.Computer;
 import hudson.model.Executor;
-import hudson.model.ParametersAction;
 import hudson.model.Queue;
 import hudson.model.Run;
 import hudson.model.queue.SubTask;
@@ -82,6 +79,10 @@ public class BlockingJobsMonitor {
             return null;
         }
 
+        if (null == item) {
+            return null;
+        }
+
         Computer[] computers = Jenkins.getInstance().getComputers();
         SubTask subTask;
         Queue.Task task;
@@ -101,7 +102,6 @@ public class BlockingJobsMonitor {
                         task = ((MatrixConfiguration) task).getParent();
                     }
 
-
                     for (String blockingJob : this.blockingJobs) {
                         if (task.getName().matches(blockingJob)) {
                             AbstractProject project = (AbstractProject) task;
@@ -117,21 +117,29 @@ public class BlockingJobsMonitor {
                                         EnvVars vars = run.getEnvironment(listener);
                                         params = vars.expand(params);
                                         Map<String, String> parsedParams = parseParams(params);
-                                        List<Action> actions = run.getActions();
-                                        boolean hasParameters = false;
-                                        for (Action act : actions) {
-                                            if ((act instanceof ParametersAction)) {
-                                                hasParameters = true;
-                                                for (ParameterValue value : ((ParametersAction) act).getParameters()) {
-                                                    if (hasBlockingParam(parsedParams, value.toString())) {
-                                                        return subTask;
-                                                    }
-                                                }
+                                        String parameters = item.getParams();
+                                        if (null != parameters && !"".equals(parameters)) {
+                                            if (hasBlockingParam(parsedParams, parameters)) {
+                                                return subTask;
                                             }
-                                        }
-                                        if (!hasParameters) {
+                                        } else {
                                             return subTask;
                                         }
+//                                        List<Action> actions = run.getActions();
+//                                        boolean hasParameters = false;
+//                                        for (Action act : actions) {
+//                                            if ((act instanceof ParametersAction)) {
+//                                                hasParameters = true;
+//                                                for (ParameterValue value : ((ParametersAction) act).getParameters()) {
+//                                                    if (hasBlockingParam(parsedParams, value.toString())) {
+//                                                        return subTask;
+//                                                    }
+//                                                }
+//                                            }
+//                                        }
+//                                        if (!hasParameters) {
+//                                            return subTask;
+//                                        }
                                     } catch (IOException e) {
                                         return null;
                                     } catch (InterruptedException e) {
@@ -172,21 +180,29 @@ public class BlockingJobsMonitor {
                                     EnvVars vars = run.getEnvironment(listener);
                                     params = vars.expand(params);
                                     Map<String, String> parsedParams = parseParams(params);
-                                    List<Action> actions = run.getActions();
-                                    boolean hasParameters = false;
-                                    for (Action act : actions) {
-                                        if ((act instanceof ParametersAction)) {
-                                            hasParameters = true;
-                                            for (ParameterValue value : ((ParametersAction) act).getParameters()) {
-                                                if (hasBlockingParam(parsedParams, value.toString())) {
-                                                    return buildableItem.task;
-                                                }
-                                            }
+                                    String parameters = item.getParams();
+                                    if (null != parameters && !"".equals(parameters)) {
+                                        if (hasBlockingParam(parsedParams, parameters)) {
+                                            return buildableItem.task;
                                         }
-                                    }
-                                    if (!hasParameters) {
+                                    } else {
                                         return buildableItem.task;
                                     }
+//                                    List<Action> actions = run.getActions();
+//                                    boolean hasParameters = false;
+//                                    for (Action act : actions) {
+//                                        if ((act instanceof ParametersAction)) {
+//                                            hasParameters = true;
+//                                            for (ParameterValue value : ((ParametersAction) act).getParameters()) {
+//                                                if (hasBlockingParam(parsedParams, value.toString())) {
+//                                                    return buildableItem.task;
+//                                                }
+//                                            }
+//                                        }
+//                                    }
+//                                    if (!hasParameters) {
+//                                        return buildableItem.task;
+//                                    }
                                 } catch (IOException e) {
                                     return null;
                                 } catch (InterruptedException e) {
@@ -201,14 +217,16 @@ public class BlockingJobsMonitor {
 
     private boolean hasBlockingParam(Map<String, String> blocked, String params) {
         if ((null != params) && (!"".equalsIgnoreCase(params))) {
-            String[] splitted = params.split(" ");
-            if ((null != splitted[1]) && (!"".equals(splitted[1])) && (splitted[1].contains("="))) {
-                String key = splitted[1].split("=")[0];
-                String value = splitted[1].split("=")[1].replace("'", "");
-                if (blocked.containsKey(key)) {
-                    return blocked.get(key).equals(value);
+                String[] splitted = params.split("\n");
+                for (int i = 0; i < splitted.length; i++) {
+                    if ((null != splitted[i+1]) && (!"".equals(splitted[i+1])) && (splitted[i+1].contains("="))) {
+                        String key = splitted[i+1].split("=")[0];
+                        String value = splitted[i+1].split("=")[1].replace("'", "");
+                        if (blocked.containsKey(key)) {
+                            return blocked.get(key).equals(value);
+                        }
+                    }
                 }
-            }
         }
 
         return (blocked == null) || (blocked.isEmpty());
