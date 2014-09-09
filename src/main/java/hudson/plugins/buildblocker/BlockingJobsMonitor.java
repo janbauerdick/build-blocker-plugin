@@ -115,8 +115,8 @@ public class BlockingJobsMonitor {
                                     try {
                                         TaskListener listener = new StreamTaskListener(run.getLogFile());
                                         EnvVars vars = run.getEnvironment(listener);
-                                        params = vars.expand(params);
-                                        Map<String, String> parsedParams = parseParams(params);
+                                        String expandedParams = vars.expand(params);
+                                        Map<String, String> parsedParams = parseParams(expandedParams);
                                         String parameters = item.getParams();
                                         if (null != parameters && !"".equals(parameters)) {
                                             if (hasBlockingParam(parsedParams, parameters)) {
@@ -125,21 +125,6 @@ public class BlockingJobsMonitor {
                                         } else {
                                             return subTask;
                                         }
-//                                        List<Action> actions = run.getActions();
-//                                        boolean hasParameters = false;
-//                                        for (Action act : actions) {
-//                                            if ((act instanceof ParametersAction)) {
-//                                                hasParameters = true;
-//                                                for (ParameterValue value : ((ParametersAction) act).getParameters()) {
-//                                                    if (hasBlockingParam(parsedParams, value.toString())) {
-//                                                        return subTask;
-//                                                    }
-//                                                }
-//                                            }
-//                                        }
-//                                        if (!hasParameters) {
-//                                            return subTask;
-//                                        }
                                     } catch (IOException e) {
                                         return null;
                                     } catch (InterruptedException e) {
@@ -178,8 +163,8 @@ public class BlockingJobsMonitor {
                                 try {
                                     TaskListener listener = new StreamTaskListener(run.getLogFile());
                                     EnvVars vars = run.getEnvironment(listener);
-                                    params = vars.expand(params);
-                                    Map<String, String> parsedParams = parseParams(params);
+                                    String expandedParams = vars.expand(params);
+                                    Map<String, String> parsedParams = parseParams(expandedParams);
                                     String parameters = item.getParams();
                                     if (null != parameters && !"".equals(parameters)) {
                                         if (hasBlockingParam(parsedParams, parameters)) {
@@ -188,21 +173,6 @@ public class BlockingJobsMonitor {
                                     } else {
                                         return buildableItem.task;
                                     }
-//                                    List<Action> actions = run.getActions();
-//                                    boolean hasParameters = false;
-//                                    for (Action act : actions) {
-//                                        if ((act instanceof ParametersAction)) {
-//                                            hasParameters = true;
-//                                            for (ParameterValue value : ((ParametersAction) act).getParameters()) {
-//                                                if (hasBlockingParam(parsedParams, value.toString())) {
-//                                                    return buildableItem.task;
-//                                                }
-//                                            }
-//                                        }
-//                                    }
-//                                    if (!hasParameters) {
-//                                        return buildableItem.task;
-//                                    }
                                 } catch (IOException e) {
                                     return null;
                                 } catch (InterruptedException e) {
@@ -228,7 +198,6 @@ public class BlockingJobsMonitor {
                     }
                 }
         }
-
         return (blocked == null) || (blocked.isEmpty());
     }
 
