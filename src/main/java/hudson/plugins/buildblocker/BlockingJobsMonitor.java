@@ -42,6 +42,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 import jenkins.model.Jenkins;
 import org.apache.commons.lang.StringUtils;
 
@@ -50,6 +51,8 @@ import org.apache.commons.lang.StringUtils;
  * expressions. The first hit returns the blocking job's name.
  */
 public class BlockingJobsMonitor {
+    
+    private static final Logger LOGGER = Logger.getLogger(BlockingJobsMonitor.class.getName());
 
     /**
      * the list of regular expressions from the job configuration
@@ -126,6 +129,7 @@ public class BlockingJobsMonitor {
                                             return subTask;
                                         }
                                     } catch (IOException e) {
+                                        LOGGER.warning("IOException: " + e.getMessage());
                                         return null;
                                     } catch (InterruptedException e) {
                                         //
@@ -174,6 +178,7 @@ public class BlockingJobsMonitor {
                                         return buildableItem.task;
                                     }
                                 } catch (IOException e) {
+                                    LOGGER.warning("IOException: " + e.getMessage());
                                     return null;
                                 } catch (InterruptedException e) {
                                     //
